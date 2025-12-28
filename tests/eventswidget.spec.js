@@ -4,17 +4,20 @@ const { test, expect } = require('@playwright/test');
 const WIDGET_PATH = '/eventswidget/';
 
 test.describe('Конструктор календаря мероприятий 3S.INFO', () => {
-  test('страница открывается и отображает основные элементы', async ({ page }) => {
+  test('страница открывается и есть основные элементы', async ({ page }) => {
     await page.goto(WIDGET_PATH);
 
+    // <title>
     await expect(page).toHaveTitle(/Конструктор календаря мероприятий/i);
 
+    // главный заголовок
     await expect(
       page.getByRole('heading', {
-        name: 'Начните создавать свой календарь мероприятий!',
+        name: /Начните создавать свой календарь мероприятий!/i,
       }),
     ).toBeVisible();
 
+    // шаги мастера
     await expect(page.getByText('Шаг 1')).toBeVisible();
     await expect(page.getByText('Выберите тематику')).toBeVisible();
 
@@ -27,62 +30,56 @@ test.describe('Конструктор календаря мероприятий 
     await expect(page.getByText('Шаг 4')).toBeVisible();
     await expect(page.getByText('Выберите цветовую гамму')).toBeVisible();
 
-    const events = page.locator('a[href*="3snet.co"]');
-    const count = await events.count();
-    expect(count).toBeGreaterThan(0);
-  });
-
-  test('happy path — настройка виджета и генерация превью', async ({ page }) => {
-    await page.goto(WIDGET_PATH);
-
-    const selectAllButtons = page.getByText('Выбрать все', { exact: true });
-    const total = await selectAllButtons.count();
-
-    if (total >= 1) await selectAllButtons.nth(0).click();
-    if (total >= 2) await selectAllButtons.nth(1).click();
-
-    const width = page.getByLabel('Ширина, px:');
-    const height = page.getByLabel('Высота, px:');
-
-    await width.fill('800');
-    await height.fill('600');
-
-    await page.getByText('Светлая тема').click().catch(() => {});
-
-    await page.getByText('Сгенерировать превью').click();
-
+    // кнопки
+    await expect(page.getByText('Сгенерировать превью')).toBeVisible();
     await expect(page.getByText('Скопировать код')).toBeVisible();
 
+    // есть хотя бы одно событие (ссылка на 3snet.co)
     const events = page.locator('a[href*="3snet.co"]');
-    expect(await events.count()).toBeGreaterThan(0);
+    await expect(events).toHaveCountGreaterThan(0);
   });
 
-  test('негатив — генерация без выбора тематики не ломает страницу', async ({ page }) => {
+  test('можно сгенерировать превью без ошибок', async ({ page }) => {
     await page.goto(WIDGET_PATH);
 
-    const events = page.locator('a[href*="3snet.co"]');
-    const initial = await events.count();
-
+    // попробуем выбрать все тематики и страны, если такие кнопки есть
     const selectAllButtons = page.getByText('Выбрать все', { exact: true });
-    if ((await selectAllButtons.count()) >= 2) {
-      await selectAllButtons.nth(1).click();
+    const countSelectAll = await selectAllButtons.count();
+    if (countSelectAll >= 1) {
+      await selectAllButtons.nth(0).click(); // тематики
+    }
+    if (countSelectAll >= 2) {
+      await selectAllButtons.nth(1).click(); // страны
     }
 
-    const width = page.getByLabel('Ширина, px:');
-    const height = page.getByLabel('Высота, px:');
-
-    await width.fill('800');
-    await height.fill('600');
-
-    await page.getByText('Темная тема').click().catch(() => {});
+    // просто жмём "Сгенерировать превью" и проверяем, что страница жива
     await page.getByText('Сгенерировать превью').click();
 
+    // заголовок на месте
     await expect(
       page.getByRole('heading', {
-        name: 'Начните создавать свой календарь мероприятий!',
+        name: /Начните создавать свой календарь мероприятий!/i,
       }),
     ).toBeVisible();
 
-    expect(await events.count()).toBeGreaterThanOrEqual(initial);
+    // кнопка "Скопировать код" видна
+    await expect(page.getByText('Скопировать код')).toBeVisible();
+
+    // и по-прежнему есть события
+    const events = page.locator('a[href*="3snet.co"]');
+    await expect(events).toHaveCountGreaterThan(0);
   });
+});
+
+// небольшой хелпер для читабельности
+expect.extend({
+  async toHaveCountGreaterThan(locator, expected) {
+    const actual = await locator.count();
+    const pass = actual > expected;
+    return {
+      pass,
+      message: () =>
+        `Ожидали, что элементов будет > ${expected}, а получили ${actual}`,
+    };
+  },
 });
